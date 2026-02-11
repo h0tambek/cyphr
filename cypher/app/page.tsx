@@ -1,5 +1,7 @@
 "use client";
 
+console.log("offset: ", offset);
+console.log("start time:", startedAt);
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
@@ -50,7 +52,9 @@ export default function Home() {
       setUsers(userList);
     });
 
-    socket.on("beat_start", ({ beat, startedAt }: any) => {
+    socket.on("beat_start", ({ beat, startedAt }) => {
+      if(currentBeat?.videoId == beat.videoId) return;
+      
       const offset = (Date.now() - startedAt) / 1000;
       setCurrentBeat(beat);
 
@@ -65,8 +69,8 @@ export default function Home() {
       const correctTime = (Date.now() - startedAt) / 1000;
       const currentTime = ytPlayerRef.current.getCurrentTime?.();
 
-      if (Math.abs(currentTime - correctTime) > 1) {
-        ytPlayerRef.current.seekTo(correctTime);
+      if (Math.abs(currentTime - correctTime) > 2) {
+        ytPlayerRef.current.seekTo(correctTime, true);
       }
     });
 
