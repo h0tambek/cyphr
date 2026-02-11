@@ -21,7 +21,7 @@ declare global {
 export default function Home() {
   const ytPlayerRef = useRef<any>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const dataArrayRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
 
   const [username, setUsername] = useState("");
@@ -179,12 +179,13 @@ export default function Home() {
   analyser.getByteFrequencyData(dataArray);
 
   const avg =
-    dataArray.reduce((a, b) => a + b, 0) /
+    dataArray.reduce((a: number, b: number) => a + b, 0) /
     dataArray.length;
 
   setVolumeLevel(avg);
   requestAnimationFrame(monitorVolume);
 }
+
 
 
   if (!registered) {
