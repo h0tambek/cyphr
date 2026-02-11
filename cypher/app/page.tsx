@@ -167,7 +167,9 @@ export default function Home() {
   function monitorVolume() {
     if (!analyserRef.current || !dataArrayRef.current) return;
 
-    analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+    analyserRef.current.getByteFrequencyData(
+      dataArrayRef.current as Uint8Array
+    );
 
     const avg =
       dataArrayRef.current.reduce((a, b) => a + b, 0) /
@@ -180,19 +182,23 @@ export default function Home() {
   if (!registered) {
     return (
       <div className="animated-bg">
-        <div style={{
-          height: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}>
-          <div style={{
-            padding: 40,
-            background: "rgba(255,255,255,0.05)",
-            backdropFilter: "blur(10px)",
-            borderRadius: 16,
-            border: "1px solid rgba(255,255,255,0.1)"
-          }}>
+        <div
+          style={{
+            height: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              padding: 40,
+              background: "rgba(255,255,255,0.05)",
+              backdropFilter: "blur(10px)",
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
             <h2>Enter Your Name</h2>
             <input
               className="input-modern"
@@ -225,20 +231,32 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="panel" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <div
+        className="panel"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         <h2>Global Cypher</h2>
 
-        <div style={{ width: "70%", maxWidth: 800, position: "relative" }}>
+        <div
+          style={{ width: "70%", maxWidth: 800, position: "relative" }}
+        >
           <div style={{ pointerEvents: "none" }}>
             <div id="yt-player" />
           </div>
-          <div style={{
-            position: "absolute",
-            bottom: 10,
-            right: 20,
-            fontSize: 12,
-            opacity: 0.6,
-          }}>
+          <div
+            style={{
+              position: "absolute",
+              bottom: 10,
+              right: 20,
+              fontSize: 12,
+              opacity: 0.6,
+            }}
+          >
             🔊 Live Sync
           </div>
         </div>
@@ -284,10 +302,18 @@ export default function Home() {
             onChange={(e) => setUrlInput(e.target.value)}
             placeholder="Paste YouTube link"
           />
-          <button className="button-modern" onClick={addBeat} style={{ marginLeft: 10 }}>
+          <button
+            className="button-modern"
+            onClick={addBeat}
+            style={{ marginLeft: 10 }}
+          >
             Add
           </button>
-          <button className="button-modern" onClick={skip} style={{ marginLeft: 10 }}>
+          <button
+            className="button-modern"
+            onClick={skip}
+            style={{ marginLeft: 10 }}
+          >
             Skip
           </button>
         </div>
@@ -297,10 +323,14 @@ export default function Home() {
         <h3>Users</h3>
         {users.map((u) => (
           <div key={u.id}>
-            <span style={{
-              color: u.color,
-              marginRight: 6
-            }}>●</span>
+            <span
+              style={{
+                color: u.color,
+                marginRight: 6,
+              }}
+            >
+              ●
+            </span>
             {u.name}
           </div>
         ))}
