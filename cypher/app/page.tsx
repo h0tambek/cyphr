@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
-const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL as string);
+const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+
+if (!socketUrl) {
+  throw new Error("NEXT_PUBLIC_SOCKET_URL is not defined");
+}
+
+const socket = io(socketUrl);
 
 declare global {
   interface Window {
@@ -165,19 +171,21 @@ export default function Home() {
   }
 
   function monitorVolume() {
-    if (!analyserRef.current || !dataArrayRef.current) return;
+  const analyser = analyserRef.current;
+  const dataArray = dataArrayRef.current;
 
-    analyserRef.current.getByteFrequencyData(
-      dataArrayRef.current as Uint8Array
-    );
+  if (!analyser || !dataArray) return;
 
-    const avg =
-      dataArrayRef.current.reduce((a, b) => a + b, 0) /
-      dataArrayRef.current.length;
+  analyser.getByteFrequencyData(dataArray);
 
-    setVolumeLevel(avg);
-    requestAnimationFrame(monitorVolume);
-  }
+  const avg =
+    dataArray.reduce((a, b) => a + b, 0) /
+    dataArray.length;
+
+  setVolumeLevel(avg);
+  requestAnimationFrame(monitorVolume);
+}
+
 
   if (!registered) {
     return (
