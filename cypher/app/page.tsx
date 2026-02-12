@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
 const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+const debugSync = process.env.NEXT_PUBLIC_DEBUG_SYNC === "true";
 
 if (!socketUrl) {
   throw new Error("NEXT_PUBLIC_SOCKET_URL is not defined");
@@ -57,6 +58,13 @@ export default function Home() {
 
     const onBeatStart = ({ beat, startedAt }: { beat: any; startedAt: number }) => {
       const offset = (Date.now() - startedAt) / 1000;
+      if (debugSync) {
+        console.log("[sync-debug] beat_start", {
+          startedAt,
+          offset,
+          videoId: beat.videoId,
+        });
+      }
       console.log("start time:", startedAt);
       console.log("offset: ", offset);
       setCurrentBeat(beat);
@@ -72,9 +80,31 @@ export default function Home() {
 
       const correctTime = (Date.now() - startedAt) / 1000;
       const currentTime = ytPlayerRef.current.getCurrentTime?.();
+      const drift = Math.abs(currentTime - correctTime);
 
-      if (Math.abs(currentTime - correctTime) > 2) {
+      if (debugSync) {
+        console.log("[sync-debug] sync", {
+          startedAt,
+          correctTime,
+          currentTime,
+          drift,
+        });
+      }
+
+      if (drift > 2) {
+        if (debugSync) {
+          console.log("[sync-debug] seek_decision", {
+            shouldSeek: true,
+            drift,
+            targetTime: correctTime,
+          });
+        }
         ytPlayerRef.current.seekTo(correctTime, true);
+      } else if (debugSync) {
+        console.log("[sync-debug] seek_decision", {
+          shouldSeek: false,
+          drift,
+        });
       }
     };
 
