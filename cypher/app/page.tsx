@@ -21,6 +21,7 @@ declare global {
 
 export default function Home() {
   const ytPlayerRef = useRef<any>(null);
+  const hasInitializedPlayerRef = useRef(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -40,20 +41,19 @@ export default function Home() {
   useEffect(() => {
     if (!registered) return;
 
+    socket.on("room_state", (room: any) => {
     loadYouTube();
 
-    socket.on("room_state", (room: any) => {
+    const onRoomState = (room: any) => {
       setQueue(room.queue);
       setCurrentBeat(room.currentBeat);
-    });
+    };
 
-    socket.on("presence_update", (userList: any[]) => {
+    const onPresenceUpdate = (userList: any[]) => {
       setUsers(userList);
-    });
+    };
 
-    socket.on("beat_start", ({ beat, startedAt }) => {
-      if(currentBeat?.videoId == beat.videoId) return;
-      
+    const onBeatStart = ({ beat, startedAt }: { beat: any; startedAt: number }) => {
       const offset = (Date.now() - startedAt) / 1000;
       if (debugSync) {
         console.log("[sync-debug] beat_start", {
@@ -62,14 +62,16 @@ export default function Home() {
           videoId: beat.videoId,
         });
       }
+      console.log("start time:", startedAt);
+      console.log("offset: ", offset);
       setCurrentBeat(beat);
 
       if (ytReady && ytPlayerRef.current) {
         ytPlayerRef.current.loadVideoById(beat.videoId, offset);
       }
-    });
+    };
 
-    socket.on("sync", ({ startedAt }) => {
+    const onSync = ({ startedAt }: { startedAt: number }) => {
       if (!startedAt || !ytPlayerRef.current) return;
 
       const correctTime = (Date.now() - startedAt) / 1000;
@@ -100,7 +102,12 @@ export default function Home() {
           drift,
         });
       }
-    });
+    };
+
+    socket.on("room_state", onRoomState);
+    socket.on("presence_update", onPresenceUpdate);
+    socket.on("beat_start", onBeatStart);
+    socket.on("sync", onSync);
 
     const syncInterval = setInterval(() => {
       socket.emit("request_sync");
@@ -117,9 +124,10 @@ export default function Home() {
     return () => {
       clearInterval(syncInterval);
       clearInterval(watchdog);
-      socket.off("room_state");
-      socket.off("presence_update");
-      socket.off("beat_start");
+      socket.off("room_state", onRoomState);
+      socket.off("presence_update", onPresenceUpdate);
+      socket.off("beat_start", onBeatStart);
+      socket.off("sync", onSync);
     };
   }, [registered, ytReady]);
 
@@ -131,11 +139,16 @@ export default function Home() {
   }
 
   function loadYouTube() {
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
+    const initializePlayer = () => {
+      if (ytPlayerRef.current || hasInitializedPlayerRef.current) {
+        return;
+      }
 
-    window.onYouTubeIframeAPIReady = () => {
+      if (!window.YT?.Player) {
+        return;
+      }
+
+      hasInitializedPlayerRef.current = true;
       ytPlayerRef.current = new window.YT.Player("yt-player", {
         height: "380",
         width: "100%",
@@ -151,7 +164,46 @@ export default function Home() {
         },
       });
     };
+
+    if (window.YT?.Player) {
+      initializePlayer();
+      return;
+    }
+
+    const previousOnReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousOnReady?.();
+      initializePlayer();
+    };
+
+    const scriptId = "youtube-iframe-api";
+    if (document.getElementById(scriptId)) {
+      return;
+    }
+
+    const tag = document.createElement("script");
+    tag.id = scriptId;
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
   }
+
+  useEffect(() => {
+    if (!registered) {
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+      hasInitializedPlayerRef.current = false;
+      return;
+    }
+
+    loadYouTube();
+
+    return () => {
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+      hasInitializedPlayerRef.current = false;
+      setYtReady(false);
+    };
+  }, [registered]);
 
   function getYouTubeId(url: string): string | null {
     const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
