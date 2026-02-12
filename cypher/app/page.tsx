@@ -1,7 +1,5 @@
 "use client";
 
-console.log("offset: ", offset);
-console.log("start time:", startedAt);
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
@@ -56,6 +54,8 @@ export default function Home() {
       if(currentBeat?.videoId == beat.videoId) return;
       
       const offset = (Date.now() - startedAt) / 1000;
+      console.log("start time:", startedAt);
+      console.log("offset: ", offset);
       setCurrentBeat(beat);
 
       if (ytReady && ytPlayerRef.current) {
