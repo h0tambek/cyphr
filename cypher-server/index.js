@@ -6,6 +6,16 @@ const cors = require("cors");
 const app = express();
 app.use(cors());
 
+const debugSync = process.env.DEBUG_SYNC === "true" || process.env.NEXT_PUBLIC_DEBUG_SYNC === "true";
+
+function logTransition(event, socketId, queueLength) {
+  if (!debugSync) return;
+  console.log(`[sync-debug] ${event}`, {
+    socketId,
+    queueLength,
+  });
+}
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -27,6 +37,7 @@ function randomColor() {
 io.on("connection", (socket) => {
 
   socket.on("register_user", (username) => {
+    logTransition("register_user", socket.id, room.queue.length);
     users[socket.id] = {
       id: socket.id,
       name: username,
@@ -39,12 +50,16 @@ io.on("connection", (socket) => {
 
   socket.on("add_beat", (beat) => {
     room.queue.push(beat);
+    logTransition("add_beat", socket.id, room.queue.length);
 
-    if (!room.currentBeat) startNext();
+    if (!room.currentBeat) startNext(socket.id);
     io.emit("room_state", room);
   });
 
-  socket.on("skip", startNext);
+  socket.on("skip", () => {
+    logTransition("skip", socket.id, room.queue.length);
+    startNext(socket.id);
+  });
 
   socket.on("request_sync", () => {
     socket.emit("sync", {
@@ -52,7 +67,8 @@ io.on("connection", (socket) => {
     });
   });
 
-  function startNext() {
+  function startNext(triggeredBySocketId = "system") {
+    logTransition("startNext", triggeredBySocketId, room.queue.length);
     if (room.queue.length === 0) {
       room.currentBeat = null;
       room.startedAt = null;
