@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
@@ -41,29 +42,30 @@ export default function Home() {
 
     loadYouTube();
 
-    socket.on("room_state", (room: any) => {
+    const onRoomState = (room: any) => {
       setQueue(room.queue);
       setCurrentBeat(room.currentBeat);
       currentStartedAtRef.current = room.startedAt;
     });
+    };
 
-    socket.on("presence_update", (userList: any[]) => {
+    const onPresenceUpdate = (userList: any[]) => {
       setUsers(userList);
-    });
+    };
 
-    socket.on("beat_start", ({ beat, startedAt }) => {
-      if(currentBeat?.videoId == beat.videoId) return;
-      
+    const onBeatStart = ({ beat, startedAt }: { beat: any; startedAt: number }) => {
       const offset = (Date.now() - startedAt) / 1000;
+      console.log("start time:", startedAt);
+      console.log("offset: ", offset);
       setCurrentBeat(beat);
       currentStartedAtRef.current = startedAt;
 
       if (ytReady && ytPlayerRef.current) {
         ytPlayerRef.current.loadVideoById(beat.videoId, offset);
       }
-    });
+    };
 
-    socket.on("sync", ({ startedAt }) => {
+    const onSync = ({ startedAt }: { startedAt: number }) => {
       if (!startedAt || !ytPlayerRef.current) return;
 
       const correctTime = (Date.now() - startedAt) / 1000;
@@ -72,7 +74,12 @@ export default function Home() {
       if (Math.abs(currentTime - correctTime) > 2) {
         ytPlayerRef.current.seekTo(correctTime, true);
       }
-    });
+    };
+
+    socket.on("room_state", onRoomState);
+    socket.on("presence_update", onPresenceUpdate);
+    socket.on("beat_start", onBeatStart);
+    socket.on("sync", onSync);
 
     const syncInterval = setInterval(() => {
       socket.emit("request_sync");
@@ -89,9 +96,10 @@ export default function Home() {
     return () => {
       clearInterval(syncInterval);
       clearInterval(watchdog);
-      socket.off("room_state");
-      socket.off("presence_update");
-      socket.off("beat_start");
+      socket.off("room_state", onRoomState);
+      socket.off("presence_update", onPresenceUpdate);
+      socket.off("beat_start", onBeatStart);
+      socket.off("sync", onSync);
     };
   }, [registered, ytReady]);
 
