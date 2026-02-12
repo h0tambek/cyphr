@@ -20,6 +20,7 @@ declare global {
 
 export default function Home() {
   const ytPlayerRef = useRef<any>(null);
+  const hasInitializedPlayerRef = useRef(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -39,6 +40,7 @@ export default function Home() {
   useEffect(() => {
     if (!registered) return;
 
+    socket.on("room_state", (room: any) => {
     loadYouTube();
 
     const onRoomState = (room: any) => {
@@ -107,11 +109,16 @@ export default function Home() {
   }
 
   function loadYouTube() {
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
+    const initializePlayer = () => {
+      if (ytPlayerRef.current || hasInitializedPlayerRef.current) {
+        return;
+      }
 
-    window.onYouTubeIframeAPIReady = () => {
+      if (!window.YT?.Player) {
+        return;
+      }
+
+      hasInitializedPlayerRef.current = true;
       ytPlayerRef.current = new window.YT.Player("yt-player", {
         height: "380",
         width: "100%",
@@ -127,7 +134,46 @@ export default function Home() {
         },
       });
     };
+
+    if (window.YT?.Player) {
+      initializePlayer();
+      return;
+    }
+
+    const previousOnReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousOnReady?.();
+      initializePlayer();
+    };
+
+    const scriptId = "youtube-iframe-api";
+    if (document.getElementById(scriptId)) {
+      return;
+    }
+
+    const tag = document.createElement("script");
+    tag.id = scriptId;
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
   }
+
+  useEffect(() => {
+    if (!registered) {
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+      hasInitializedPlayerRef.current = false;
+      return;
+    }
+
+    loadYouTube();
+
+    return () => {
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+      hasInitializedPlayerRef.current = false;
+      setYtReady(false);
+    };
+  }, [registered]);
 
   function getYouTubeId(url: string): string | null {
     const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
