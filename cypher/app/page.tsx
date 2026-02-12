@@ -1,7 +1,4 @@
 "use client";
-
-console.log("offset: ", offset);
-console.log("start time:", startedAt);
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
@@ -22,6 +19,7 @@ declare global {
 
 export default function Home() {
   const ytPlayerRef = useRef<any>(null);
+  const currentStartedAtRef = useRef<number | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -46,6 +44,7 @@ export default function Home() {
     socket.on("room_state", (room: any) => {
       setQueue(room.queue);
       setCurrentBeat(room.currentBeat);
+      currentStartedAtRef.current = room.startedAt;
     });
 
     socket.on("presence_update", (userList: any[]) => {
@@ -57,6 +56,7 @@ export default function Home() {
       
       const offset = (Date.now() - startedAt) / 1000;
       setCurrentBeat(beat);
+      currentStartedAtRef.current = startedAt;
 
       if (ytReady && ytPlayerRef.current) {
         ytPlayerRef.current.loadVideoById(beat.videoId, offset);
@@ -120,6 +120,18 @@ export default function Home() {
         },
         events: {
           onReady: () => setYtReady(true),
+          onStateChange: (event: any) => {
+            if (event.data === window.YT.PlayerState.ENDED) {
+              const videoId =
+                ytPlayerRef.current?.getVideoData?.()?.video_id ??
+                currentBeat?.videoId;
+
+              socket.emit("track_ended", {
+                videoId,
+                startedAt: currentStartedAtRef.current,
+              });
+            }
+          },
         },
       });
     };
