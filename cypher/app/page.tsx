@@ -42,14 +42,12 @@ export default function Home() {
   useEffect(() => {
     if (!registered) return;
 
-    socket.on("room_state", (room: any) => {
     loadYouTube();
 
     const onRoomState = (room: any) => {
       setQueue(room.queue);
       setCurrentBeat(room.currentBeat);
       currentStartedAtRef.current = room.startedAt;
-    });
     };
 
     const onPresenceUpdate = (userList: any[]) => {
