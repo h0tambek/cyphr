@@ -20,6 +20,7 @@ declare global {
 
 export default function Home() {
   const ytPlayerRef = useRef<any>(null);
+  const currentStartedAtRef = useRef<number | null>(null);
   const hasInitializedPlayerRef = useRef(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<any>(null);
@@ -46,6 +47,8 @@ export default function Home() {
     const onRoomState = (room: any) => {
       setQueue(room.queue);
       setCurrentBeat(room.currentBeat);
+      currentStartedAtRef.current = room.startedAt;
+    });
     };
 
     const onPresenceUpdate = (userList: any[]) => {
@@ -57,6 +60,7 @@ export default function Home() {
       console.log("start time:", startedAt);
       console.log("offset: ", offset);
       setCurrentBeat(beat);
+      currentStartedAtRef.current = startedAt;
 
       if (ytReady && ytPlayerRef.current) {
         ytPlayerRef.current.loadVideoById(beat.videoId, offset);
@@ -131,6 +135,18 @@ export default function Home() {
         },
         events: {
           onReady: () => setYtReady(true),
+          onStateChange: (event: any) => {
+            if (event.data === window.YT.PlayerState.ENDED) {
+              const videoId =
+                ytPlayerRef.current?.getVideoData?.()?.video_id ??
+                currentBeat?.videoId;
+
+              socket.emit("track_ended", {
+                videoId,
+                startedAt: currentStartedAtRef.current,
+              });
+            }
+          },
         },
       });
     };
