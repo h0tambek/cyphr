@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
 const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+const debugSync = process.env.NEXT_PUBLIC_DEBUG_SYNC === "true";
 
 if (!socketUrl) {
   throw new Error("NEXT_PUBLIC_SOCKET_URL is not defined");
@@ -20,6 +21,8 @@ declare global {
 
 export default function Home() {
   const ytPlayerRef = useRef<any>(null);
+  const currentStartedAtRef = useRef<number | null>(null);
+  const hasInitializedPlayerRef = useRef(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataArrayRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -41,34 +44,72 @@ export default function Home() {
 
     loadYouTube();
 
-    socket.on("room_state", (room: any) => {
+    const onRoomState = (room: any) => {
       setQueue(room.queue);
       setCurrentBeat(room.currentBeat);
-    });
+      currentStartedAtRef.current = room.startedAt;
+    };
 
-    socket.on("presence_update", (userList: any[]) => {
+    const onPresenceUpdate = (userList: any[]) => {
       setUsers(userList);
-    });
+    };
 
-    socket.on("beat_start", ({ beat, startedAt }: any) => {
+    const onBeatStart = ({ beat, startedAt }: { beat: any; startedAt: number }) => {
       const offset = (Date.now() - startedAt) / 1000;
+      if (debugSync) {
+        console.log("[sync-debug] beat_start", {
+          startedAt,
+          offset,
+          videoId: beat.videoId,
+        });
+      }
+      console.log("start time:", startedAt);
+      console.log("offset: ", offset);
       setCurrentBeat(beat);
+      currentStartedAtRef.current = startedAt;
 
       if (ytReady && ytPlayerRef.current) {
         ytPlayerRef.current.loadVideoById(beat.videoId, offset);
       }
-    });
+    };
 
-    socket.on("sync", ({ startedAt }) => {
+    const onSync = ({ startedAt }: { startedAt: number }) => {
       if (!startedAt || !ytPlayerRef.current) return;
 
       const correctTime = (Date.now() - startedAt) / 1000;
       const currentTime = ytPlayerRef.current.getCurrentTime?.();
+      const drift = Math.abs(currentTime - correctTime);
 
-      if (Math.abs(currentTime - correctTime) > 1) {
-        ytPlayerRef.current.seekTo(correctTime);
+      if (debugSync) {
+        console.log("[sync-debug] sync", {
+          startedAt,
+          correctTime,
+          currentTime,
+          drift,
+        });
       }
-    });
+
+      if (drift > 2) {
+        if (debugSync) {
+          console.log("[sync-debug] seek_decision", {
+            shouldSeek: true,
+            drift,
+            targetTime: correctTime,
+          });
+        }
+        ytPlayerRef.current.seekTo(correctTime, true);
+      } else if (debugSync) {
+        console.log("[sync-debug] seek_decision", {
+          shouldSeek: false,
+          drift,
+        });
+      }
+    };
+
+    socket.on("room_state", onRoomState);
+    socket.on("presence_update", onPresenceUpdate);
+    socket.on("beat_start", onBeatStart);
+    socket.on("sync", onSync);
 
     const syncInterval = setInterval(() => {
       socket.emit("request_sync");
@@ -85,9 +126,10 @@ export default function Home() {
     return () => {
       clearInterval(syncInterval);
       clearInterval(watchdog);
-      socket.off("room_state");
-      socket.off("presence_update");
-      socket.off("beat_start");
+      socket.off("room_state", onRoomState);
+      socket.off("presence_update", onPresenceUpdate);
+      socket.off("beat_start", onBeatStart);
+      socket.off("sync", onSync);
     };
   }, [registered, ytReady]);
 
@@ -99,11 +141,16 @@ export default function Home() {
   }
 
   function loadYouTube() {
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
+    const initializePlayer = () => {
+      if (ytPlayerRef.current || hasInitializedPlayerRef.current) {
+        return;
+      }
 
-    window.onYouTubeIframeAPIReady = () => {
+      if (!window.YT?.Player) {
+        return;
+      }
+
+      hasInitializedPlayerRef.current = true;
       ytPlayerRef.current = new window.YT.Player("yt-player", {
         height: "380",
         width: "100%",
@@ -116,10 +163,61 @@ export default function Home() {
         },
         events: {
           onReady: () => setYtReady(true),
+          onStateChange: (event: any) => {
+            if (event.data === window.YT.PlayerState.ENDED) {
+              const videoId =
+                ytPlayerRef.current?.getVideoData?.()?.video_id ??
+                currentBeat?.videoId;
+
+              socket.emit("track_ended", {
+                videoId,
+                startedAt: currentStartedAtRef.current,
+              });
+            }
+          },
         },
       });
     };
+
+    if (window.YT?.Player) {
+      initializePlayer();
+      return;
+    }
+
+    const previousOnReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousOnReady?.();
+      initializePlayer();
+    };
+
+    const scriptId = "youtube-iframe-api";
+    if (document.getElementById(scriptId)) {
+      return;
+    }
+
+    const tag = document.createElement("script");
+    tag.id = scriptId;
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
   }
+
+  useEffect(() => {
+    if (!registered) {
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+      hasInitializedPlayerRef.current = false;
+      return;
+    }
+
+    loadYouTube();
+
+    return () => {
+      ytPlayerRef.current?.destroy?.();
+      ytPlayerRef.current = null;
+      hasInitializedPlayerRef.current = false;
+      setYtReady(false);
+    };
+  }, [registered]);
 
   function getYouTubeId(url: string): string | null {
     const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
